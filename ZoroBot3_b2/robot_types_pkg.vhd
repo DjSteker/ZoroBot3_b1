@@ -15,7 +15,6 @@ package robot_types_pkg is
     -- Definir estos aquí para una gestión centralizada y consistente.
     -- =========================================================================
     -- Factor de escala para convertir 'float' de C a 'natural'/'signed' en VHDL.
-    -- Multiplicar el valor flotante por este factor para obtener el entero.
     -- Ejemplo: 10.1633 * 1000 = 10163 (aproximado).
     constant C_FLOAT_TO_FIXED_SCALE_MM_PER_S : natural := 1000;
     -- Factor de escala para velocidades angulares (rad/s)
@@ -33,6 +32,69 @@ package robot_types_pkg is
     constant C_MENU_RUN                  : natural := 0;
     constant C_MENU_CONFIG               : natural := 1;
     constant C_MENU_TYPES                : natural := 2; -- Number of menu types
+
+    -- Constantes para Macroarray (from macroarray.h)
+    constant C_MACROARRAY_LENGTH         : natural := 100; -- Assuming a length for the circular buffer
+    constant C_MACROARRAY_MAX_LABELS     : natural := 20;  -- Max 'size' parameter
+
+    -- Scaling factor for float conversion in macroarray_print (value / 100.0)
+    constant C_MACROARRAY_FLOAT_SCALE    : natural := 100;
+
+    -- Constantes para LSM6DSR (from lsm6dsr.h)
+    constant C_PI_FIXED_POINT            : natural := 314159265; -- PI * 10^8
+    constant C_PI_FIXED_POINT_SCALE      : natural := 100000000; -- Scale for PI
+    constant C_MPU_DPS_TO_RADPS_FIXED    : natural := natural(real(C_PI_FIXED_POINT) / real(180) / real(C_PI_FIXED_POINT_SCALE) * real(1000000)); -- Scaled by 10^6
+    constant C_MPU_DPS_TO_RADPS_FIXED_SCALE : natural := 1000000; -- Scale for MPU_DPS_TO_RADPS
+    constant C_GYRO_SENSITIVITY_2000DPS_FIXED : natural := 70 * 100000; -- Scaled by 10^5
+    constant C_GYRO_SENSITIVITY_4000DPS_FIXED : natural := 140 * 100000; -- Scaled by 10^5
+    constant C_GYRO_SENSITIVITY_FIXED_SCALE : natural := 100000; -- Scale for sensitivities
+    constant C_SYSTICK_FREQUENCY_HZ      : natural := 1000; -- Assuming 1000Hz for system tick
+
+    -- =========================================================================
+    -- FIXED-POINT ARITHMETIC CONFIGURATION (for encoder calculations)
+    -- =========================================================================
+    -- Number of fractional bits for fixed-point representation
+    constant C_FIXED_POINT_FRAC_BITS : natural := 16;
+    -- Scaling factor for converting float to fixed-point integer (2^16 = 65536)
+    constant C_FIXED_POINT_SCALE     : integer := 2**C_FIXED_POINT_FRAC_BITS;
+
+    -- Type for signed fixed-point numbers (e.g., 32 bits total for Q16.16)
+    subtype T_FIXED_POINT is signed(31 downto 0);
+    -- A simple function to convert an integer to fixed point
+    function to_fixed(val : integer) return T_FIXED_POINT;
+
+    -- =========================================================================
+    -- ENCODER CONSTANTS (from encoders.h context, assuming typical values)
+    -- =========================================================================
+    constant C_WHEEL_DIAMETER_MM        : real := 32.0; -- Example wheel diameter in mm
+    constant C_ENCODER_TICKS_PER_REV    : natural := 1440; -- Example encoder ticks per revolution (e.g. 360 CPR * 4)
+
+    -- MICROMETERS_PER_TICK = (PI * WHEEL_DIAMETER_MM) / ENCODER_TICKS_PER_REVOLUTION * 1000.0f
+    constant C_MICROMETERS_PER_TICK_FP : T_FIXED_POINT := to_fixed(integer(round(math_pi * C_WHEEL_DIAMETER_MM / real(C_ENCODER_TICKS_PER_REV) * 1000.0 * real(C_FIXED_POINT_SCALE))));
+    constant C_MICROMETERS_PER_MILLIMETER : natural := 1000; -- 1000 micrometers in 1 millimeter
+
+    -- WHEELS_SEPARATION in millimeters
+    constant C_WHEELS_SEPARATION_MM     : real := 80.0; -- Example wheel separation in mm
+    constant C_WHEELS_SEPARATION_MM_FP  : T_FIXED_POINT := to_fixed(integer(round(C_WHEELS_SEPARATION_MM * real(C_FIXED_POINT_SCALE))));
+
+    -- MILLIMETERS_PER_METER (used in C angular speed calculation, here effectively 1000)
+    constant C_MILLIMETERS_PER_METER    : natural := 1000;
+
+
+    -- =========================================================================
+    -- EEPROM CONSTANTS
+    -- =========================================================================
+    constant DATA_LENGTH        : natural := 256; -- Total size of eeprom_data array (int16_t)
+    constant EEPROM_BASE_ADDRESS: natural := 0;  -- Conceptual base address for internal RAM
+    constant EEPROM_SECTOR      : natural := 0;  -- Conceptual sector for internal RAM (not directly used for internal RAM)
+
+    -- Data indices for EEPROM (from C code context, example values)
+    constant DATA_INDEX_MAZE    : natural := 50; -- Example index for maze data
+    constant DATA_INDEX_LSM6DSR : natural := 0;  -- Example index for LSM6DSR data
+    constant DATA_INDEX_SENSORS : natural := 10; -- Example index for sensor data
+    constant DATA_INDEX_MENU    : natural := 20; -- Example index for menu data
+    constant DATA_INDEX_RC5     : natural := 30; -- Example index for RC5 data
+
 
     -- =========================================================================
     -- TIPOS ENUMERADOS (Extraídos de "move.h" y otros .h)
@@ -158,6 +220,108 @@ package robot_types_pkg is
 
     -- Tipo para valueConfig (array de int8_t en C)
     type value_config_array_t is array (menu_config_mode_type) of natural range 0 to C_NUM_VALUES_DEBUG; -- Rango suficiente
+
+    -- Tipo para almacenar los datos en el circular buffer (int16_t en C)
+    type macroarray_data_t is array (natural range 0 to C_MACROARRAY_LENGTH-1) of signed(15 downto 0);
+    -- Tipo para almacenar los índices de las etiquetas (uint8_t en C)
+    type macroarray_label_indices_t is array (natural range 0 to C_MACROARRAY_MAX_LABELS-1) of natural range 0 to C_MACROARRAY_MAX_LABELS-1;
+
+    -- Tipo para datos de EEPROM (int16_t en C)
+    type eeprom_data_t is array (natural range 0 to DATA_LENGTH-1) of signed(15 downto 0);
+
+    -- =========================================================================
+    -- RECORD TYPE FOR CELL WEIGHTS
+    -- =========================================================================
+    -- Equivalent to struct cell_weigth in C
+    type cell_weigth is record
+        speed      : natural range 0 to 65535; -- uint16_t
+        time       : T_FIXED_POINT;          -- float (fixed-point)
+        total_time : T_FIXED_POINT;          -- float (fixed-point)
+        penalty    : T_FIXED_POINT;          -- float (fixed-point)
+    end record;
+
+    -- Type for the array of cell_weights
+    -- Assuming a maximum number of cells for the floodfill table, e.g., 256
+    constant C_MAX_FLOODFILL_CELLS : natural := 256;
+    type T_CELL_WEIGHT_ARRAY is array (natural range 0 to C_MAX_FLOODFILL_CELLS-1) of cell_weigth;
+
+    -- =========================================================================
+    -- CONFIGURACIÓN DEL LABERINTO (DEBE SER AJUSTADA A TU MAZE REAL)
+    -- =========================================================================
+    constant MAZE_ROWS      : natural := 6;  -- Ejemplo: 6 filas
+    constant MAZE_COLUMNS   : natural := 6;  -- Ejemplo: 6 columnas
+    constant MAZE_CELLS     : natural := MAZE_ROWS * MAZE_COLUMNS; -- Número total de celdas
+    -- Valor máximo para distancias de floodfill no alcanzadas
+    constant MAZE_MAX_DISTANCE_FP : T_FIXED_POINT := to_fixed(9999); -- Un valor grande en punto fijo
+
+    -- =========================================================================
+    -- BITS DE PAREDES Y ESTADO DE CELDA
+    -- =========================================================================
+    constant EAST_BIT       : integer := 1;  -- 0b0001
+    constant SOUTH_BIT      : integer := 2;  -- 0b0010
+    constant WEST_BIT       : integer := 4;  -- 0b0100
+    constant NORTH_BIT      : integer := 8;  -- 0b1000
+    constant VISITED_BIT    : integer := 16; -- 0b10000
+
+    -- =========================================================================
+    -- ENUMERACIONES DE DIRECCIÓN Y PASO
+    -- =========================================================================
+    type compass_direction is (
+        NORTH, NORTH_EAST, EAST, SOUTH_EAST,
+        SOUTH, SOUTH_WEST, WEST, NORTH_WEST,
+        TARGET, NONE_DIRECTION
+    );
+
+    type step_direction is (
+        FRONT, LEFT, RIGHT, BACK,
+        -- TARGET se usa para direcciones de floodfill, no de paso directo.
+        NONE_STEP
+    );
+
+    -- =========================================================================
+    -- ESTRUCTURAS DE DATOS DE COLAS Y PILAS
+    -- =========================================================================
+    -- Tipo para las entradas de la cola del Floodfill
+    type queue_cell is record
+        cell      : natural range 0 to MAZE_CELLS - 1;
+        direction : compass_direction;
+        last_step : compass_direction; -- Reemplazando step_direction por compass_direction para consistencia con C
+        count     : natural;
+    end record;
+
+    -- Tamaño máximo de la cola/pila, ajusta según el tamaño de tu laberinto
+    constant C_MAX_QUEUE_SIZE : natural := MAZE_CELLS * 2; -- Aproximación
+
+    type T_CELLS_QUEUE_ARRAY is array (0 to C_MAX_QUEUE_SIZE - 1) of queue_cell;
+    type cells_queue_t is record
+        head  : natural range 0 to C_MAX_QUEUE_SIZE;
+        tail  : natural range 0 to C_MAX_QUEUE_SIZE;
+        queue : T_CELLS_QUEUE_ARRAY;
+    end record;
+
+    type T_CELLS_STACK_ARRAY is array (0 to MAZE_CELLS - 1) of natural range 0 to MAZE_CELLS - 1;
+    type cells_stack_t is record
+        size  : natural range 0 to MAZE_CELLS;
+        stack : T_CELLS_STACK_ARRAY;
+    end record;
+
+    -- Valores de dirección para cálculos (en lugar de int8_t en C)
+    type compass_direction_values_t is record
+        EAST  : integer;
+        SOUTH : integer;
+        WEST  : integer;
+        NORTH : integer;
+    end record;
+
+    -- Tipo para la tabla del laberinto (int16_t en C)
+    type T_MAZE_ARRAY is array (0 to MAZE_CELLS - 1) of integer range -32768 to 32767;
+
+    -- Tipo para la tabla de Floodfill (float en C, aquí T_FIXED_POINT)
+    type T_FLOODFILL_ARRAY is array (0 to MAZE_CELLS - 1) of T_FIXED_POINT;
+
+    -- Tipo para la secuencia de movimientos de carrera
+    type T_RUN_SEQUENCE_MOVEMENTS_ARRAY is array (0 to MAZE_CELLS + 2) of movement;
+
 
     -- =========================================================================
     -- CONSTANTES DE ARRAYS DE PARÁMETROS DE MOVIMIENTO
@@ -376,12 +540,88 @@ package robot_types_pkg is
         )
     );
 
+    -- =========================================================================
+    -- ROM PARA ETIQUETAS DE MACROARRAY (ASCII)
+    -- Cada elemento es un std_logic_vector que representa una cadena ASCII.
+    -- La longitud de cada string debe ser consistente o gestionada por una longitud variable.
+    -- Aquí, definimos algunas etiquetas de ejemplo para ilustrar.
+    -- Las etiquetas deben ser pre-procesadas (ej. con Python/script) a un formato VHDL.
+    -- "distance", "cells", "current_cell", "end_offset", "angular_speed", "millimeters"
+    -- Las etiquetas se representan como arrays de std_logic_vector(7 downto 0) (ASCII).
+    -- La longitud máxima de la etiqueta es un factor a considerar.
+    -- El valor en la ROM sería la cadena ASCII codificada.
+    -- La ROM sería un array de std_logic_vector o strings.
+
+    -- Battery monitoring constants (Add these if not already present)
+    constant AUX_BATTERY_ID                 : natural   := 4; -- Example ID, adjust as per your system
+    constant ADC_BITS                       : natural   := 12; -- Example ADC resolution (e.g., 12-bit ADC)
+    constant ADC_VREF_MV                    : natural   := 3300; -- Example ADC reference voltage in mV (e.g., 3.3V)
+    constant ADC_LSB_FP                     : integer   := 8;  -- Fractional bits for ADC_LSB_VHDL (e.g., 8 means value * 2^-8)
+    constant ADC_LSB_VHDL                   : unsigned(ADC_BITS+ADC_LSB_FP-1 downto 0) := to_unsigned(ADC_VREF_MV * 2**ADC_LSB_FP / (2**ADC_BITS), ADC_BITS+ADC_LSB_FP);
+                                                               -- Represents ADC_VREF_MV / (2^ADC_BITS) in fixed point (mV per LSB)
+
+    -- Example voltage divider factor. If your C code's VOLT_DIV_FACTOR is a float like 11.0f,
+    -- then use its fixed-point equivalent. Assuming 11.0 for now, scaled by 8 fractional bits.
+    constant VOLT_DIV_FACTOR_FP             : integer   := 8;
+    constant VOLT_DIV_FACTOR_VHDL           : unsigned(15 downto 0) := to_unsigned(11 * 2**VOLT_DIV_FACTOR_FP, 16);
+
+    -- Battery voltage limits in millivolts (integers for fixed-point math)
+    -- Multiplied by 1000 to work with mV, then scaled up by fixed-point factor
+    -- Assuming a common fractional bit count for all voltage values, e.g., 8
+    constant BATTERY_VOLTAGE_FP             : integer   := 8; -- Fractional bits for voltage values
+
+    constant BATTERY_3S_LOW_LIMIT_VOLTAGE_MV_FP : unsigned(23 downto 0) := to_unsigned(9900 * 2**BATTERY_VOLTAGE_FP, 24); -- 9.9V * 1000
+    constant BATTERY_3S_HIGH_LIMIT_VOLTAGE_MV_FP: unsigned(23 downto 0) := to_unsigned(12600 * 2**BATTERY_VOLTAGE_FP, 24); -- 12.6V * 1000
+
+    constant BATTERY_2S_LOW_LIMIT_VOLTAGE_MV_FP : unsigned(23 downto 0) := to_unsigned(6600 * 2**BATTERY_VOLTAGE_FP, 24); -- 6.6V * 1000
+    constant BATTERY_2S_HIGH_LIMIT_VOLTAGE_MV_FP: unsigned(23 downto 0) := to_unsigned(8400 * 2**BATTERY_VOLTAGE_FP, 24); -- 8.4V * 1000
+
+    -- Low-pass filter alpha value. Represent as an integer, scaled.
+    -- E.g., if alpha is 0.1f, and we use 8 fractional bits, 0.1 * 2^8 = 25.6, so use 26.
+    constant BATTERY_LPF_ALPHA_FP           : integer   := 8;
+    constant BATTERY_LPF_ALPHA_VHDL         : unsigned(BATTERY_LPF_ALPHA_FP-1 downto 0) := to_unsigned(round(0.1 * real(2**BATTERY_LPF_ALPHA_FP)), BATTERY_LPF_ALPHA_FP);
+    -- 1 - alpha: (1 - 0.1) * 2^8 = 0.9 * 256 = 230.4, use 230
+    constant BATTERY_LPF_ONE_MINUS_ALPHA_VHDL: unsigned(BATTERY_LPF_ALPHA_FP-1 downto 0) := to_unsigned(round(0.9 * real(2**BATTERY_LPF_ALPHA_FP)), BATTERY_LPF_ALPHA_FP);
+
+
+    -- Explore algorithm types (from menu_run_get_explore_algorithm)
+    type explore_algorithm_type is (
+        EXPLORE_HANDWALL,
+        EXPLORE_FLOODFILL,
+        EXPLORE_TIME_TRIAL,
+        EXPLORE_NONE -- Default or error state
+    );
+
+    -- GPIO Constants (assuming simple bit positions or IDs)
+    constant GPIOB_13_ID : natural := 13;
+    constant GPIOB_15_ID : natural := 15;
+
+    -- AUX IDs (re-confirming if they are in robot_types_pkg already or need adding)
+    constant AUX_CURRENT_LEFT_ID: natural := 5; -- Example ID, adjust
+    constant AUX_CURRENT_RIGHT_ID: natural := 6; -- Example ID, adjust
+    constant AUX_MENU_BTN_ID    : natural := 3; -- Example ID, adjust
+
+    -- Sensor IDs (re-confirming)
+    constant SENSOR_FRONT_LEFT_WALL_ID : natural := 1;
+    constant SENSOR_FRONT_RIGHT_WALL_ID: natural := 2;
+
+    -- Print Message IDs (additional for main.c printf)
+    constant MSG_ID_AUX_RAW_FMT : natural := 20; -- For "BA: %4d CI: %4d CD: %4d BO: %4d\n"
+    constant MSG_ID_MPU_FMT     : natural := 21;
+    constant MSG_ID_MPU_ZRAW_FMT: natural := 22;
+    constant MSG_ID_SENSORS_RAW_MAIN_FMT : natural := 23;
+    constant MSG_ID_ENCODERS_MAIN_FMT : natural := 24;
+    constant MSG_ID_BATTERY_VOLTAGE_FMT : natural := 25;
+    constant MSG_ID_HINVERNADERO_INIT_MAIN : natural := 26; -- For setup() initial print
+    constant MSG_ID_INIT_DONE_MAIN : natural := 27; -- For setup() initial print
+
 end package robot_types_pkg;
 
 
 package body robot_types_pkg is
-    -- Puedes incluir funciones o procedimientos aquí si son necesarios
-    -- para inicializar o manipular los tipos y constantes.
-    -- Por ejemplo, funciones para la conversión de float a punto fijo en tiempo de ejecución
-    -- si no se hace directamente en la declaración de constantes.
+    function to_fixed(val : integer) return T_FIXED_POINT is
+    begin
+        -- Resize to 32 bits and then multiply by the scale factor
+        return resize(to_signed(val, 32) * C_FIXED_POINT_SCALE, 32);
+    end function;
 end package body robot_types_pkg;
