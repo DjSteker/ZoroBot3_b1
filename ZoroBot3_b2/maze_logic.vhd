@@ -4,41 +4,40 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
--- Define constants for maze dimensions
--- These can be passed as generics to allow configuration
--- or declared as constants if fixed within this entity.
+-- Definir constantes para las dimensiones del laberinto
+-- Estas pueden pasarse como genéricos para permitir la configuración
+-- o declararse como constantes si son fijas dentro de esta entidad.
 constant C_MAZE_ROWS_HOME       : natural := 6;
 constant C_MAZE_COLUMNS_HOME    : natural := 6;
 constant C_MAZE_ROWS_COMPETITION  : natural := 16;
 constant C_MAZE_COLUMNS_COMPETITION : natural := 16;
 
--- Define max stack size for goals based on maximum possible cells
--- For 16x16, max goals are 4. But for a general stack, it would need to be larger.
--- Let's assume a reasonable max for 'goals.stack'.
+-- Definir el tamaño máximo de la pila para objetivos según el máximo de celdas posibles.
+-- Para 16x16, el máximo de objetivos es 4. Sin embargo, para una pila general, debería ser mayor.
+-- Supongamos un máximo razonable para 'goals.stack'.
 constant C_MAX_GOALS_STACK_SIZE : natural := 4; -- Max goals for competition maze (fixed 4 goals)
 constant C_MAX_CELL_INDEX     : natural := C_MAZE_ROWS_COMPETITION * C_MAZE_COLUMNS_COMPETITION;
 
--- Define maze type enumeration
+-- Definir enumeración de tipo laberinto
 type maze_type_t is (MAZE_HOME, MAZE_COMPETITION);
--- Note: 'menu_run_get_maze_type()' from C would be an input signal of this type.
--- We'll represent it as 'i_maze_type' input.
+-- Nota: 'menu_run_get_maze_type()' de C sería una señal de entrada de este tipo.
+-- La representaremos como entrada 'i_maze_type'.
 
 --------------------------------------------------------------------------------
--- Entity: maze_logic_module
--- Description: VHDL equivalent of the maze dimension and goal generation logic.
+-- Entidad: maze_logic_module
+-- Descripción: Equivalente VHDL de la dimensión del laberinto y la lógica de generación de objetivos. --
+-- Entradas:
+-- i_clk: Señal de reloj (si se requiere lógica secuencial para las escrituras en la pila)
+-- i_reset: Señal de reinicio
+-- i_load_goals: Pulso para activar la carga de objetivos (equivalente a la llamada a maze_get_goals())
+-- i_maze_type: Señal de entrada que representa la salida de menu_run_get_maze_type()
 --
--- Inputs:
---   i_clk         : Clock signal (if sequential logic is needed for stack writes)
---   i_reset       : Reset signal
---   i_load_goals  : Pulse to trigger loading goals (equivalent to maze_get_goals() call)
---   i_maze_type   : Input signal representing menu_run_get_maze_type() output
---
--- Outputs:
---   o_maze_rows   : Current number of maze rows
---   o_maze_columns: Current number of maze columns
---   o_maze_cells  : Total number of maze cells
---   o_goals_stack_size : Current size of the goals stack
---   o_goals_stack_data : The goals data (can be an array or a port to a memory)
+-- Salidas:
+-- o_maze_rows: Número actual de filas del laberinto
+-- o_maze_columns: Número actual de columnas del laberinto
+-- o_maze_cells: Número total de celdas del laberinto
+-- o_goals_stack_size: Tamaño actual de la pila de objetivos
+-- o_goals_stack_data: Datos de los objetivos (pueden ser un array o una conexión a memoria)
 --------------------------------------------------------------------------------
 entity maze_logic_module is
     port (
